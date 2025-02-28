@@ -1,0 +1,79 @@
+# 启动可视化
+/vis/open OGL  # 使用OpenGL引擎进行可视化
+/vis/viewer/set/viewpointThetaPhi 90 180  # 设置视角
+/vis/drawVolume  # 绘制几何模型
+/vis/scene/add/axes 0 0 0 1 m  # 添加坐标轴
+/vis/scene/endOfEventAction accumulate  # 累积事件
+/vis/scene/add/trajectories smooth  # 显示粒子轨迹（如果有）
+
+# 初始化并设置世界大小
+/gate/world/geometry/setXLength 200. cm
+/gate/world/geometry/setYLength 200. cm
+/gate/world/geometry/setZLength 220. cm
+
+# 定义探测器的几何
+/gate/world/daughters/name cylindricalPET
+/gate/world/daughters/insert cylinder
+/gate/cylindricalPET/setMaterial Air
+/gate/cylindricalPET/geometry/setRmax 353 mm
+/gate/cylindricalPET/geometry/setRmin 323 mm
+/gate/cylindricalPET/geometry/setHeight 129.0 mm
+/gate/cylindricalPET/vis/forceWireframe
+/gate/cylindricalPET/vis/setColor red
+
+# 定义扇区 (Rsector)
+/gate/cylindricalPET/daughters/name rsector
+/gate/cylindricalPET/daughters/insert box
+/gate/rsector/placement/setTranslation 338.0 0 0 mm
+/gate/rsector/geometry/setXLength 20.0 mm
+/gate/rsector/geometry/setYLength 32.0 mm
+/gate/rsector/geometry/setZLength 129.0 mm
+/gate/rsector/setMaterial Air
+/gate/rsector/vis/forceWireframe
+/gate/rsector/vis/setColor green
+
+# 定义模块 (Module)
+/gate/rsector/daughters/name module
+/gate/rsector/daughters/insert box
+/gate/module/geometry/setXLength 20.0 mm
+/gate/module/geometry/setYLength 32.0 mm
+/gate/module/geometry/setZLength 32.0 mm
+/gate/module/setMaterial Plastic
+/gate/module/vis/forceWireframe
+/gate/module/vis/setColor blue
+
+# 定义晶体 (Crystal)
+/gate/module/daughters/name crystal
+/gate/module/daughters/insert box
+/gate/crystal/placement/setTranslation 0 0 0 mm
+/gate/crystal/geometry/setXLength 20.0 mm
+/gate/crystal/geometry/setYLength 4.0 mm
+/gate/crystal/geometry/setZLength 4.0 mm
+/gate/crystal/setMaterial LSO
+/gate/crystal/vis/forceWireframe
+/gate/crystal/vis/setColor red
+
+# 定义重复结构
+/gate/crystal/repeaters/insert cubicArray
+/gate/crystal/cubicArray/setRepeatNumberX 1
+/gate/crystal/cubicArray/setRepeatNumberY 8
+/gate/crystal/cubicArray/setRepeatNumberZ 8
+/gate/crystal/cubicArray/setRepeatVector 0. 4.0 4.0 mm
+
+/gate/module/repeaters/insert cubicArray
+/gate/module/cubicArray/setRepeatNumberX 1
+/gate/module/cubicArray/setRepeatNumberY 1
+/gate/module/cubicArray/setRepeatNumberZ 4
+/gate/module/cubicArray/setRepeatVector 0. 0. 32.25 mm
+
+/gate/rsector/repeaters/insert ring
+/gate/rsector/ring/setRepeatNumber 56
+
+/gate/systems/cylindricalPET/rsector/attach rsector
+/gate/systems/cylindricalPET/module/attach module
+/gate/systems/cylindricalPET/crystal/attach crystal
+/gate/crystal/attachCrystalSD
+
+# 启动可视化和模拟
+/vis/viewer/flush  # 刷新视图，确保绘制
+/gate/run/initialize  # 初始化模拟
