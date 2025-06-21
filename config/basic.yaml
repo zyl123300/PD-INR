@@ -1,6 +1,6 @@
 network:
-  net_type: 1layermlp #1layermlp #mlp
-  num_layers: 1 #1 #4
+  net_type: mlp #1layermlp #mlp
+  num_layers: 4 #1 #4
   hidden_dim: 16
   skips: []
   out_dim: 1
@@ -18,7 +18,7 @@ render:
   n_fine: 0
   perturb: True
   raw_noise_std: 0.
-  netchunk:  16711680 #8355840 #2088960
+  netchunk:  2088960 #16711680 #8355840
 train:
   epoch: 40 # 40
   n_batch: 1

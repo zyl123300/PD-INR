@@ -37,7 +37,7 @@ class TOFPETDataset(Dataset):
         xyz1, xyz2 = system_matrix._get_xyz_sinogram_coordinates(subset_idx=None)
         directions = xyz2 - xyz1
         rays = torch.cat([xyz1, directions], dim=-1) / 1000 # mm -> m
-        sinogram = data["sinogram"].to(torch.device('cuda:1')).div_(1000)
+        sinogram = data["sinogram"].to(torch.device('cuda:2')).div_(1000)
         shape = (*sinogram.shape[:-1], 3)
         self.rays = torch.cat([xyz1.reshape(shape), directions.reshape(shape)], dim=-1) / 1000
         self.nVoxel = np.array(object_meta.shape)
@@ -51,7 +51,7 @@ class TOFPETDataset(Dataset):
 
         self.projs = sinogram
         self.projs_concat = self.projs.flatten(0, -2)  # (102989824,13)
-        self.projs_nonTOF = torch.sum(sinogram, -1)  # (224,449,1024)
+        self.projs_nonTOF = torch.sum(sinogram, -1)  # (224,449,4096)
         self.projs_nonTOF_concat = self.projs_nonTOF.flatten()  # (102989824)
         projs_valid = (self.rays_concat[..., 7] > self.rays_concat[..., 6])  # & (self.projs_nonTOF_concat > 0)
 
@@ -146,7 +146,4 @@ class TOFPETDataset(Dataset):
         # check if far > near
         return near.values.to(device), far.values.to(device)
 
-if __name__ == "__main__":
-    # import os
-    # print(os.getcwd())
-    ds = TOFPETDataset('data/tof_pet_noise.pickle')
+

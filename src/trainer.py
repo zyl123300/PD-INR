@@ -1,31 +1,22 @@
-
 import json
 import time
+import os
+import os.path as osp
+import torch
+import numpy as np
+import cv2
+
 from torch.utils.tensorboard import SummaryWriter
 from tqdm import tqdm, trange
 from shutil import copyfile
 
-from . import get_mse_log, render_ct, calc_TV_loss, calc_TV2_loss
-from .dataset.add_poisson_noise import bi_load
-from .dataset.ct import CTDataset
-# import dataset.pet
-from src.dataset.tofpet import TOFPETDataset
-# from src.dataset.pet import PETDataset
+from . import get_mse_log, calc_TV_loss, calc_TV2_loss
+from .dataset.tofpet import TOFPETDataset
 from .network import get_network
 from .encoder import get_encoder
-import os
-import os.path as osp
-import torch
-# import imageio.v2 as iio
-import cv2
-import numpy as np
-import argparse
-
-# from src.config.configloading import load_config
-from .render import render, render_tof, run_network, render_utof, render_atof, render_with_box, render2
-from .loss import calc_mse_loss, calc_poisson_loss, calc_tv_loss, calc_huber_loss, calc_gmc_loss
-from .utils import get_psnr, get_mse, get_psnr_3d, get_ssim_3d, cast_to_image
-
+from .render import  render_tof, run_network
+from .loss import calc_poisson_loss
+from .utils import get_psnr_3d, get_ssim_3d, cast_to_image
 
 class Trainer:
     def __init__(self, cfg, device="cuda"):
@@ -62,6 +53,8 @@ class Trainer:
         self.tof_meta = self.train_dset.tof_meta
         self.voxels = self.train_dset.voxels  # if self.i_eval > 0 else None
         self.voxels_shape =self.train_dset.voxels_shape
+        self.tv_weight = cfg["exp"]["tv_weight"]
+
         # Network
         network = get_network(cfg["network"]["net_type"])
         cfg["network"].pop("net_type", None)
@@ -80,10 +73,6 @@ class Trainer:
             grad_vars += list(self.net_fine.parameters())
 
         # Optimizer
-        # self.optimizer = torch.optim.Adam(params=grad_vars, betas=(0.9, 0.999))
-        # self.lr_scheduler = torch.optim.lr_scheduler.StepLR(
-        #     optimizer=self.optimizer, step_size=cfg["train"]["lrate_step"], gamma=cfg["train"]["lrate_gamma"])
-
         self.encoding_method = cfg["encoder"]["encoding"]
         if "grid_planes" == self.encoding_method:
             print("AdamW optimizer")
@@ -93,28 +82,14 @@ class Trainer:
                                                        {'params': self.net.density.parameters(), 'weight_decay': 1e-6}],
                                                lr=cfg["train"]["lrate"], amsgrad=True)
 
-            # params_list_weight = (p for name, p in self.net.density.named_parameters() if 'bias' not in name)
-            # params_list_bias = (p for name, p in self.net.density.named_parameters() if 'bias' in name)
-            # self.optimizer = torch.optim.AdamW(params = [{'params': self.net.encoder.planes, 'weight_decay': 0},
-            #                                     {'params': self.net.encoder.encoder.parameters(), 'weight_decay': 1e-2},
-            #                                     {'params': params_list_weight, 'weight_decay': 1e-3},
-            #                                     {'params': params_list_bias}],
-            #                                     lr = cfg["train"]["lrate"], amsgrad = True)
         elif "hashgrid" == self.encoding_method:
             print("AdamW optimizer")
-            # self.optimizer = torch.optim.AdamW(params = [{'params': self.net.encoder.encoder.parameters(), 'weight_decay': 1e-4},
-            #                                     {'params': self.net.density.parameters(), 'weight_decay': 1e-6}],
-            #                                     lr = cfg["train"]["lrate"], amsgrad = True)
             self.optimizer = torch.optim.Adam(params=grad_vars, lr=cfg["train"]["lrate"], betas=(0.9, 0.999),
                                               weight_decay=0.0, amsgrad=True)
         else:
             print("AdamW optimizer")
             self.optimizer = torch.optim.Adam(params=grad_vars, lr=cfg["train"]["lrate"], betas=(0.9, 0.999),
                                               weight_decay=0.0, amsgrad=True)
-
-        # self.lr_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(self.optimizer,
-        #                             cfg["train"]["epoch"],
-        #                             cfg["train"]["lrate"] / 3)
 
         if "pretrained" in cfg["train"].keys():
             ckpt = torch.load(cfg["train"]["pretrained"])
@@ -168,11 +143,6 @@ class Trainer:
             timein = time.time()
             self.train_dset.update_indices()
             train_dloader = torch.utils.data.DataLoader(self.train_dset, batch_size=self.batch_size)
-
-            # if "grid" in self.encoding_method:
-            # if idx_epoch == 3:
-            #     for param in self.net.encoder.parameters():
-            #         param.requires_grad = False
 
             # Train
             loss_train_list = []
@@ -259,11 +229,9 @@ class TOFTrainer(Trainer):
         loss = {"loss": 0.}
         # calc_mse_loss(loss, projs, projs_pred)
         calc_poisson_loss(loss, projs_pred, projs, lam=1)
-
         # calc_TV_loss(loss,tv_gradient, gamma= 2*1e-5)
         # loss["loss"] = loss["loss_poisson"] + loss["tv_gradient"]
-
-        calc_TV2_loss(loss,tv_gradient2, gamma= 8*1e-6) #平衡的指标=2*1e-5    1*1e-5
+        calc_TV2_loss(loss,tv_gradient2, gamma= self.tv_weight)
         loss["loss"] = loss["loss_poisson"] + loss["tv_gradient2"]
         # Log
         for ls in loss.keys():
@@ -275,16 +243,12 @@ class TOFTrainer(Trainer):
         image = self.train_dset.image
         image = image.squeeze()
 
-        # image = (image - image.min()) / (image.max() - image.min())
         voxels = self.train_dset.voxels
 
         image_pred = run_network(voxels, self.net_fine if self.net_fine is not None else self.net, self.netchunk)
         image_pred = image_pred.squeeze()
-        # image_pred = (image_pred - image_pred.min()) / (image_pred.max() - image_pred.min())
 
         loss = {
-            # "proj_mse": get_mse(projs_pred, projs),
-            # "proj_psnr": get_psnr(projs_pred, projs),
             "mse_log": get_mse_log(image, image_pred),
             "psnr_3d": get_psnr_3d(image_pred, image),
             "ssim_3d": get_ssim_3d(image_pred, image),
@@ -303,8 +267,6 @@ class TOFTrainer(Trainer):
         self.writer.add_image("eval/density (row1: gt, row2: pred)", cast_to_image(show_density), global_step,
                               dataformats="HWC")
 
-        # show_proj = torch.concat([projs, projs_pred], dim=1)
-        # self.writer.add_image("eval/projection (left: gt, right: pred)", cast_to_image(show_proj), global_step, dataformats="HWC")
 
         for ls in loss.keys():
             self.writer.add_scalar(f"eval/{ls}", loss[ls], global_step)
