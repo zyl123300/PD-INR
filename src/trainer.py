@@ -16,7 +16,7 @@ from .network import get_network
 from .encoder import get_encoder
 from .render import  render_tof, run_network
 from .loss import calc_poisson_loss
-from .utils import get_psnr_3d, get_ssim_3d, cast_to_image
+from .utils import get_psnr_3d, get_ssim_3d, cast_to_image, bi_save
 
 class Trainer:
     def __init__(self, cfg, device="cuda"):

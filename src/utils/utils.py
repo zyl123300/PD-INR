@@ -11,7 +11,6 @@ import parallelproj
 import cv2
 from skimage.metrics import structural_similarity
 
-
 def bi_load(path: str, shape: tuple):
     shape = tuple(reversed(shape))
     data = (np.fromfile(path, dtype='float32').reshape(shape).astype(np.float32))
@@ -91,19 +90,16 @@ def get_psnr_3d(arr1, arr2, size_average=False,
     if torch.is_tensor(arr2):
         arr2 = arr2.cpu().detach().numpy()
     PIXEL_MAX = arr2.max()
-    # arr1 = arr1[np.newaxis, ...]
-    # arr2 = arr2[np.newaxis, ...]
+
     arr1 = arr1.astype(np.float64)
     arr2 = arr2.astype(np.float64)
     # eps = 1e-10
     se = np.power(arr1 - arr2, 2)
     # mse = se.mean(axis=1).mean(axis=1).mean(axis=1)
     mse = se.mean()
-    # zero_mse = np.where(mse == 0)
-    # mse[zero_mse] = eps
+
     psnr = 20 * np.log10(PIXEL_MAX / np.sqrt(mse))
-    # #zero mse, return 100
-    # psnr[zero_mse] = 100
+
 
     if size_average:
         return psnr.mean()
@@ -121,17 +117,6 @@ def get_ssim_3d(arr1, arr2, size_average=True, data_range=1.0,
     :return:
         Format-None if size_average else [N]
     """
-    # if FOV_mask is not None:
-    #     arr1 = arr1.copy()
-    #     arr2 = arr2.copy()
-    #     arr1[~FOV_mask] = 0
-    #     arr2[~FOV_mask] = 0
-
-    # truncate to [0, 1]
-    # arr1 = np.maximum(np.minimum(arr1, 1), 0)
-    # arr2 = np.maximum(np.minimum(arr2, 1), 0)
-    # arr1 = np.clip(arr1, 0, 1)
-    # arr2 = np.clip(arr2, 0, 1)
 
     if torch.is_tensor(arr1):
         arr1 = arr1.cpu().detach().numpy()
@@ -165,6 +150,28 @@ def cast_to_image(tensor, normalize=True):
         img = cv2.normalize(img, None, 0, 1, cv2.NORM_MINMAX)
     return img[..., np.newaxis]
 
+def add_poisson_noise_tof(sino_tof):
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    shape = sino_tof.shape
+
+    sino_tof = sino_tof.contiguous().view(-1, 13).to(device)
+
+    n_rays = 16384
+    num = (sino_tof.shape[0] + n_rays - 1) // n_rays
+    for i in range(num):
+        sino_tof_subset = sino_tof[i * n_rays:(i + 1) * n_rays, :]
+        sino_ntof_subset = sino_tof_subset.sum(dim=-1, keepdim=True)
+
+        scale = 10 / (sino_ntof_subset + 1e-10)
+
+        sino_tof_subset.mul_(scale)
+        sino_tof_subset.copy_(torch.poisson(sino_tof_subset))
+        sino_tof_subset.div_(scale)
+        sino_tof[i * n_rays:(i + 1) * n_rays, :] = sino_tof_subset
+
+    sino_tof = sino_tof.view(shape)
+
+    return sino_tof
 
 def pet_forward(H, im, n_subsets = 24):
     H.set_n_subsets(n_subsets)
@@ -251,10 +258,9 @@ class SystemMatrixGenerator:
             proj_meta,
             sinogram_sensitivity=None,
             obj2obj_transforms=[],
-            # scale_projection_by_sensitivity=True,
             attenuation_map=atten_map,
-            N_splits=10,  # Split FP/BP into 10 loops to save memory
-            device="cpu",  # projections are output on the CPU, but internal computation is on GPU
+            N_splits=10,
+            device="cpu",
             n_subsets=self.n_subsets,
         )
         print("System matrix created successfully.")
@@ -793,43 +799,11 @@ class MyLikelihood:
         projections_predicted = self.system_matrix.forward(object, subset_idx) + additive_term_subset #a*p_it
         projections_predicted2 = self.system_matrix.forward2(object,subset_idx) #p_it
         tsum_proj2=torch.sum(projections_predicted2,dim=-1,keepdim=True) #p_i
-        #############################
         tsum_proj2=tsum_proj2.squeeze()
         proj_subset_nTOF=torch.sum(proj_subset,dim=-1,keepdim=True).squeeze() #y_i
-
-        # subset_indices = self.system_matrix.subset_indices_array[subset_idx]
-        # self.y_i[subset_indices]=proj_subset_nTOF
-        # self.p_i[subset_indices]=tsum_proj2
-
         output=((proj_subset_nTOF + 1e-3)/(tsum_proj2+ 1e-3)) #y_i/p_i
         A=proj_subset_nTOF + 1e-3
         B=tsum_proj2+ 1e-3
-        pass
-        # zero_mask = (proj_subset_nTOF == 0)
-        # output[zero_mask] = 1.0
-        # zero_mask = (tsum_proj2 < 0.5)
-        # output[zero_mask] = 1.0
-        #############################
-        # A=projections_predicted2 / (tsum_proj2 + pytomography.delta)
-        # B=proj_subset/(projections_predicted+pytomography.delta)
-        #
-        # zero_mask = (tsum_proj2 == 0)
-        # zero_mask_repeat = zero_mask.repeat(1,1,1,13)
-        # A[zero_mask_repeat] = 1/13
-        #
-        # zero_mask = (proj_subset == 0) & (projections_predicted == 0)
-        # B[zero_mask] = 1.0
-        # zero_mask = (proj_subset == 0) & (projections_predicted != 0)
-        # # print(pytomography.delta)
-        # B[zero_mask] = 1.0
-        # # zero_mask = (proj_subset != 0) & (projections_predicted == 0)
-        # # B[zero_mask] = 1.5
-        #
-        # output=torch.sum(A * B,dim=-1)
-        #
-        # zero_mask = (tsum_proj2 == 0).squeeze()
-        # output[zero_mask] = 1.0
-        ################################
         return output
 
 

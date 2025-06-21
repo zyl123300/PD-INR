@@ -31,16 +31,9 @@ class DensityNetwork(nn.Module):
         super().__init__()
         self.encoder = encoder
 
-        # if type(bound) is list:
-        #     self.bound = nn.Parameter(torch.Tensor(bound), requires_grad=False)
-        # else:
-        #     self.bound = bound
         self.bound = nn.Parameter(torch.Tensor(sVoxel / 2), requires_grad=False)
-
         self.density = DensityNet(encoder.output_dim, num_layers=num_layers, hidden_dim=hidden_dim,
                                   skips=skips, out_dim=out_dim, last_activation=last_activation)  # .to(torch.half)
-        # self.density = GraphConvNet(encoder.output_dim, num_layers=num_layers, hidden_dim=hidden_dim,
-        #                         out_dim=out_dim, last_activation=last_activation, n_samples = 256) # .to(torch.half)
 
     def forward(self, x):
         x = self.encoder(x, self.bound)

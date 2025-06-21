@@ -25,7 +25,7 @@ class HashGridEncoder(nn.Module):
     def forward(self, x, aabb, bound=(-1, 1)):
         x = normalize_aabb(x, aabb)
         x = (x - bound[0]) / (bound[1] - bound[0])
-        return self.encoder(x)  # .to(torch.float32)
+        return self.encoder(x)
 
 def normalize_aabb(pts, aabb):
     if pts.shape[-1] <= 3:
@@ -111,13 +111,13 @@ class ImagePriorEncoder(nn.Module):
         features = self.features.permute(3, 0, 1, 2).unsqueeze(0).to(device)
         grid = x.view(1, -1, 1, 1, 3).to(device)
         sampled_features = F.grid_sample(features, grid, mode='nearest', padding_mode='border', align_corners=True)
-        sampled_features = sampled_features.squeeze(3).squeeze(3).squeeze(0)  # 移除多余维度
-        if sampled_features.dim() == 3:  # 形状为 (C, N, 1)
-            sampled_features = sampled_features.squeeze(-1)  # 去掉最后的维度
+        sampled_features = sampled_features.squeeze(3).squeeze(3).squeeze(0)
+        if sampled_features.dim() == 3:
+            sampled_features = sampled_features.squeeze(-1)
         elif sampled_features.dim() != 2:
             raise RuntimeError(f"Unexpected shape of sampled_features: {sampled_features.shape}")
 
-        sampled_features = sampled_features.permute(1, 0)  # (C, N) -> (N, C)
+        sampled_features = sampled_features.permute(1, 0)
         return sampled_features
 
 
@@ -171,7 +171,7 @@ class ImagePriorHashEncoder(nn.Module):
         pool = nn.MaxPool3d(kernel_size=scale_factor, stride=scale_factor)
         downsampled_image = pool(image)
 
-        return downsampled_image.squeeze(0).squeeze(0)  # 移除batch和channel维度
+        return downsampled_image.squeeze(0).squeeze(0)
 
     def gaussian_blur_3d(self, input_tensor, kernel_size=5, sigma=1.0):
         if kernel_size % 2 == 0:
@@ -184,8 +184,8 @@ class ImagePriorHashEncoder(nn.Module):
 
         kernel_1d = gaussian_1d(kernel_size, sigma)
         kernel_3d = kernel_1d[:, None, None] * kernel_1d[None, :, None] * kernel_1d[None, None, :]
-        kernel_3d = kernel_3d / kernel_3d.sum()  # Normalize the kernel
-        kernel_3d = kernel_3d.to(input_tensor.device).unsqueeze(0).unsqueeze(0)  # Shape: (1, 1, D, H, W)
+        kernel_3d = kernel_3d / kernel_3d.sum()
+        kernel_3d = kernel_3d.to(input_tensor.device).unsqueeze(0).unsqueeze(0)
         input_tensor = input_tensor.unsqueeze(0).unsqueeze(0)
         blurred_tensor = torch.nn.functional.conv3d(
             input_tensor, kernel_3d, padding=kernel_size // 2

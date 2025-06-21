@@ -42,21 +42,15 @@ def calc_tv_loss(loss, x, lam = 1e-5):
 
 def calc_poisson_loss(loss, x, y, lam = 1e-3):
     poisson = nn.PoissonNLLLoss(log_input = False)
-    # mask_positive = x > 0
-    # out = poisson(x[mask_positive], y[mask_positive])
     out = poisson(x, y)
     loss["loss"] += out * lam
     loss["loss_poisson"] = out * lam
     return loss
 def calc_TV_loss(loss,tv_gradient,gamma=1):
     tv = torch.sum(tv_gradient,dim = -1,keepdim = False)
-    # tv = tv / tv.shape[0]
-    # tv = torch.sum(tv, dim = -1,keepdim = False)
     loss["tv_gradient"] = tv * gamma
     return loss
 def calc_TV2_loss(loss,tv_gradient2,gamma=1):
     tv = torch.sum(tv_gradient2,dim = -1,keepdim = False)
-    # tv = tv / tv.shape[0]
-    # tv = torch.sum(tv, dim = -1,keepdim = False)
     loss["tv_gradient2"] = tv * gamma
     return loss

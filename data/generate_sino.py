@@ -3,7 +3,7 @@ import numpy as np
 import torch
 import pickle
 from data.data_utils import SystemMatrixGenerator, add_poisson_noise_tof, pet_forward
-from utils import bi_load, bi_save4
+from src.utils import bi_load, bi_save4
 
 system_matrix = SystemMatrixGenerator(
     path='./mMR_Geometry.mac',

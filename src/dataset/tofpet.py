@@ -50,8 +50,8 @@ class TOFPETDataset(Dataset):
         self.voxels = torch.tensor(self.get_voxels(), dtype=torch.float32, device=device)
 
         self.projs = sinogram
-        self.projs_concat = self.projs.flatten(0, -2)  # (102989824,13)
-        self.projs_nonTOF = torch.sum(sinogram, -1)  # (224,449,4096)
+        self.projs_concat = self.projs.flatten(0, -2)
+        self.projs_nonTOF = torch.sum(sinogram, -1)
         self.projs_nonTOF_concat = self.projs_nonTOF.flatten()  # (102989824)
         projs_valid = (self.rays_concat[..., 7] > self.rays_concat[..., 6])  # & (self.projs_nonTOF_concat > 0)
 
@@ -88,20 +88,12 @@ class TOFPETDataset(Dataset):
         self.select_inds = select_inds
         rays = self.rays_concat[select_inds].to(self.device)
         projs = self.projs_concat[select_inds].to(self.device)
-        # print(projs.shape)
-        # print(rays.shape)
+
         out = {
             "projs": projs,
             "rays": rays,
         }
 
-        # elif self.type == "val":
-        #     rays = self.rays[index].to(self.device)
-        #     projs = self.projs[index].to(self.device)
-        #     out = {
-        #         "projs":projs,
-        #         "rays":rays,
-        #     }
         return out
 
     def get_voxels(self):

@@ -120,12 +120,9 @@ def render_tof(rays, tof_meta, net, net_fine, n_samples, n_fine, perturb, netchu
     ########
     tof_valid_mask = (upper_bound_distance_tof < n_sigmas * t_sigma_eff) | (
                 lower_bound_distance_tof < n_sigmas * t_sigma_eff)
-    tof_weights = tof_weights * tof_valid_mask  # 截断
+    tof_weights = tof_weights * tof_valid_mask
     tof_weights *= tof_trunc_corr_factor
-    # 对 TOF 权重进行归一化，使每个采样点在所有 TOF bin 上的权重和为 1
-    # tof_weights_sum = tof_weights.sum(dim=-1, keepdim=True)  # (n_rays, n_samples, 1)
-    # tof_weights = tof_weights / (tof_weights_sum + 1e-8)  # 避免除以 0
-    # 计算经过 TOF 加权后的累积权重和颜色
+
     acc, tv_gradient = raw2outputs_tof(raw, z_vals, rays_d, tof_weights, raw_noise_std)
 
     ret = {"acc": acc, "pts": pts, "tv_gradient": tv_gradient, "tv_gradient2": tv_gradient2, }
@@ -133,11 +130,9 @@ def render_tof(rays, tof_meta, net, net_fine, n_samples, n_fine, perturb, netchu
 
 
 def raw2outputs_tof(raw, z_vals, rays_d, tof_weights, raw_noise_std=0.):
-    # 计算相邻采样点之间的距离 (梯形积分)
     dists = z_vals * torch.norm(rays_d[..., None, :], dim=-1)  # (n_rays, n_samples)
     raw_ = raw.squeeze()
 
-    # 梯形积分计算累积的 acc_map，加入 TOF 权重
     acc = raw_[..., 0].unsqueeze(-1) * (dists[..., 1] - dists[..., 0]).unsqueeze(-1) * tof_weights[..., 0, :] + raw_[
         ..., -1].unsqueeze(-1) * (
                   dists[..., -1] - dists[..., -2]).unsqueeze(-1) * tof_weights[..., -1, :]
@@ -159,16 +154,16 @@ def render(rays, net, net_fine, n_samples, n_fine, perturb, netchunk, raw_noise_
     z_vals = near * (1. - t_vals) + far * (t_vals)
     # print("t", near.shape)
     # print("z", z_vals.shape)
-    z_vals = z_vals.expand([n_rays, n_samples])  # (1024,256)
+    z_vals = z_vals.expand([n_rays, n_samples])
 
     if perturb:
         # get intervals between samples
-        mids = .5 * (z_vals[..., 1:] + z_vals[..., :-1])  # (1024,255)
-        upper = torch.cat([mids, z_vals[..., -1:]], -1)  # (1024,256)
-        lower = torch.cat([z_vals[..., :1], mids], -1)  # (1024,256)
+        mids = .5 * (z_vals[..., 1:] + z_vals[..., :-1])
+        upper = torch.cat([mids, z_vals[..., -1:]], -1)
+        lower = torch.cat([z_vals[..., :1], mids], -1)
         # stratified samples in those intervals
         t_rand = torch.rand(z_vals.shape, device=lower.device)
-        z_vals = lower + (upper - lower) * t_rand  # (1024,256)
+        z_vals = lower + (upper - lower) * t_rand
 
     pts = rays_o[..., None, :] + rays_d[..., None, :] * z_vals[..., :, None]  # [n_rays, n_samples, 3]
 

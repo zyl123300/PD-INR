@@ -2,7 +2,6 @@ from pytomography.io.PET import gate
 from pytomography.metadata import ObjectMeta
 from pytomography.metadata.PET import PETTOFMeta, PETSinogramPolygonProjMeta
 import pytomography
-from pytomography.priors import Prior
 from pytomography.projectors import SystemMatrix
 from collections.abc import Callable
 import torch
@@ -26,7 +25,14 @@ def add_poisson_noise_tof(sino_tof):
         sino_tof[i * n_rays:(i + 1) * n_rays, :] = sino_tof_subset
     sino_tof = sino_tof.view(shape)
     return sino_tof
-
+def get_attenuation_map_bin(path:str,shape:tuple):
+    umap=bi_load(path, shape).copy()
+    return torch.tensor(umap)/10
+def bi_load(path: str, shape: tuple):
+    shape = tuple(reversed(shape))
+    data = (np.fromfile(path, dtype='float32').reshape(shape).astype(np.float32))
+    data=np.flip(np.transpose(data, (2, 1, 0)), axis=[0, 2]).copy()
+    return data
 def pet_forward(H, im, n_subsets = 24):
     H.set_n_subsets(n_subsets)
     sinogram = torch.zeros(H.proj_meta.shape).unsqueeze(-1).repeat(1,1,1,H.proj_meta.tof_meta.num_bins).to(pytomography.dtype).to(H.output_device)
